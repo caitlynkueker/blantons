@@ -1,0 +1,23 @@
+# Render blueprint. In Render: New + → Blueprint → point at this folder/repo.
+# It reads this file and creates the service; you then fill in the secret env vars.
+services:
+  - type: web
+    name: blantons-qc-engine
+    runtime: docker
+    plan: starter            # small always-on instance; bump if jobs are large
+    healthCheckPath: /healthz
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false          # set in the dashboard (secret)
+      - key: QC_SUBMIT_KEY
+        sync: false          # must match the hub
+      - key: QC_UPLOAD_SECRET
+        sync: false          # random secret; must match the hub's QC_UPLOAD_SECRET
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-5
+      - key: HUB_SUBMIT_URL
+        value: https://qcinstall.netlify.app/.netlify/functions/qc-submit
+      - key: FRAME_FPS
+        value: "0.5"
+      - key: MAX_IMAGES
+        value: "42"
