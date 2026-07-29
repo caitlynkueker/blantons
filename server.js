@@ -44,7 +44,7 @@ const upload = multer({ dest: os.tmpdir(), limits: { fileSize: 600 * 1024 * 1024
 // CORS so the hub (different origin) can upload.
 app.use((req, res, next) => {
   res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Headers", "Content-Type, X-Upload-Key");
+  res.set("Access-Control-Allow-Headers", "Content-Type, X-Upload-Token");
   res.set("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
