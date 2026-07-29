@@ -101,7 +101,7 @@ export async function reviewJob({ job, zipPath, name }) {
     `Review this completed NC residential HVAC install per your instructions. Return ONLY the JSON object described in your instructions — no prose, no markdown fences.` });
 
   const msg = await anthropic.messages.create({
-    model: MODEL, max_tokens: 8192, system: SYSTEM_PROMPT,
+    model: MODEL, max_tokens: 16000, system: SYSTEM_PROMPT,
     messages: [{ role: "user", content }],
   });
   const raw = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
@@ -146,9 +146,26 @@ function stripImg(f) { const { image_index, ...rest } = f || {}; return rest; }
 
 function parseJson(s) {
   if (!s) return null;
+  const tryParse = (x) => { try { return JSON.parse(x); } catch { return undefined; } };
   let t = s.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-  try { return JSON.parse(t); } catch {}
-  const a = t.indexOf("{"), b = t.lastIndexOf("}");
-  if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch {} }
+  let r = tryParse(t); if (r !== undefined) return r;
+  const a = t.indexOf("{"); if (a < 0) return null;
+  t = t.slice(a);
+  r = tryParse(t); if (r !== undefined) return r;
+  const b = t.lastIndexOf("}");
+  if (b > 0) { r = tryParse(t.slice(0, b + 1)); if (r !== undefined) return r; }
+  // Repair a truncated reply (stop_reason=max_tokens): balance open strings/brackets.
+  const stack = []; let inStr = false, esc = false, out = "";
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i]; out += c;
+    if (inStr) { if (esc) esc = false; else if (c === "\\") esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true; else if (c === "{" || c === "[") stack.push(c); else if (c === "}" || c === "]") stack.pop();
+  }
+  if (inStr) out += '"';
+  out = out.replace(/,\s*$/, "").replace(/:\s*$/, ": null");
+  for (let i = stack.length - 1; i >= 0; i--) out += stack[i] === "{" ? "}" : "]";
+  r = tryParse(out); if (r !== undefined) return r;
+  const c2 = out.lastIndexOf("}");
+  if (c2 > 0) { r = tryParse(out.slice(0, c2 + 1)); if (r !== undefined) return r; }
   return null;
 }
