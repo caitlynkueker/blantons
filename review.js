@@ -28,6 +28,28 @@ async function fetchLessons() {
   } catch { return ""; }
 }
 
+// Transcribe an audio clip via an OpenAI-compatible speech-to-text API.
+// Configure with STT_API_KEY (+ optional STT_BASE_URL / STT_MODEL). Without a
+// key, transcription is skipped and the review notes the audio wasn't read.
+async function transcribeAudio(filePath) {
+  const key = process.env.STT_API_KEY;
+  if (!key) return null;
+  try {
+    const st = fs.statSync(filePath);
+    if (st.size > 24 * 1024 * 1024) { console.error("STT skip (too big):", filePath, st.size); return null; }
+    const base = (process.env.STT_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
+    const model = process.env.STT_MODEL || "whisper-1";
+    const fd = new FormData();
+    fd.append("file", new Blob([fs.readFileSync(filePath)]), path.basename(filePath));
+    fd.append("model", model);
+    fd.append("response_format", "text");
+    const r = await fetch(base + "/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: fd });
+    if (!r.ok) { console.error("STT failed", r.status, (await r.text().catch(() => "")).slice(0, 200)); return null; }
+    const t = (await r.text()).trim();
+    return t && t.length > 1 ? t : null;
+  } catch (e) { console.error("STT error", e && e.message); return null; }
+}
+
 const sh = (cmd, args) => execFileSync(cmd, args, { stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 28 });
 const isImg = (f) => /\.(jpe?g|png|heic|heif|webp)$/i.test(f);
 const isVid = (f) => /\.(mp4|mov|m4v|avi|3gp)$/i.test(f);
@@ -66,15 +88,24 @@ export async function reviewJob({ job, zipPath, name }) {
   const prepped = []; let n = 0;
   for (const p of photos) { const dst = path.join(prep, `p_${n++}.jpg`); if (toJpeg(p, dst)) prepped.push({ path: dst, kind: "photo", src: path.basename(p) }); }
   let vi = 0, audioDecoded = 0, audioFailed = 0;
+  const audioClips = []; // { path, src } — clips to transcribe
   for (const v of videos) {
     vi++; const fdir = path.join(prep, `v${vi}`); fs.mkdirSync(fdir, { recursive: true });
     try { sh("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", v, "-vf", `fps=${FRAME_FPS}`, path.join(fdir, "f_%03d.jpg")]); } catch {}
-    // extract audio (best-effort; transcription not done here — reviewer listens)
-    try { sh("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", v, "-vn", "-ac", "1", "-ar", "16000", path.join(prep, `a${vi}.wav`)]); audioDecoded++; } catch { audioFailed++; }
+    // extract the audio track (compact mp3) so the narration can be transcribed
+    const ap = path.join(prep, `a${vi}.mp3`);
+    try { sh("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", v, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "64k", ap]); audioDecoded++; if (fs.existsSync(ap)) audioClips.push({ path: ap, src: path.basename(v) }); } catch { audioFailed++; }
     for (const f of (fs.existsSync(fdir) ? fs.readdirSync(fdir) : [])) prepped.push({ path: path.join(fdir, f), kind: "frame", src: `${path.basename(v)}` });
   }
-  audioFailed += audios.length ? 0 : 0; // standalone audio files just count as present
-  const audioPresent = audios.length + videos.length > 0;
+  for (const a of audios) audioClips.push({ path: a, src: path.basename(a) }); // standalone audio files too
+  const audioPresent = audioClips.length > 0;
+
+  // ---- Transcribe the technician narration (speech-to-text) ----
+  const transcripts = [];
+  for (const clip of audioClips) {
+    const text = await transcribeAudio(clip.path);
+    if (text) transcripts.push({ src: clip.src, text });
+  }
 
   // Cap total images: keep ALL photos, fill the rest with evenly-sampled frames.
   const photoImgs = prepped.filter((x) => x.kind === "photo");
@@ -94,10 +125,16 @@ export async function reviewJob({ job, zipPath, name }) {
     content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: im.b64 } });
   });
   const lessonsText = await fetchLessons();
+  const narration = transcripts.length
+    ? "\n\nTECH NARRATION — transcribed from the video/audio. Treat this as spoken EVIDENCE from the technician: they often state model/serial numbers, measurements, what they are pointing at, and whether a step was done. Use it alongside the images, and flag any contradiction between what is said and what is shown:\n" +
+      transcripts.map((x) => `• (${x.src}) “${String(x.text).replace(/\s+/g, " ").trim()}”`).join("\n")
+    : "";
+  const audioNote = transcripts.length ? "present and transcribed (see TECH NARRATION below)"
+    : (audioPresent ? (process.env.STT_API_KEY ? "present but could not be transcribed — reviewer to listen" : "present (transcription not enabled) — reviewer to listen") : "none");
   content.push({ type: "text", text:
     `JOB NUMBER: ${job}\n` +
-    `MEDIA: ${photos.length} photos, ${videos.length} videos (${images.filter(i=>i.kind==="frame").length} frames sampled), audio ${audioPresent ? "present (not transcribed — reviewer to listen)" : "none"}.` +
-    lessonsText + `\n\n` +
+    `MEDIA: ${photos.length} photos, ${videos.length} videos (${images.filter(i=>i.kind==="frame").length} frames sampled), audio ${audioNote}.` +
+    narration + lessonsText + `\n\n` +
     `Review this completed NC residential HVAC install per your instructions. Return ONLY the JSON object described in your instructions — no prose, no markdown fences.` });
 
   const msg = await anthropic.messages.create({
@@ -114,7 +151,7 @@ export async function reviewJob({ job, zipPath, name }) {
   // Attach referenced images (plates + finding evidence) for the report.
   data._images = images;
   data.job = job;
-  data.audio = { present: audioPresent, failed: audioFailed };
+  data.audio = { present: audioPresent, failed: audioFailed, transcribed: transcripts.length };
 
   const html = buildReport(data);
   const counts = data.counts || {};

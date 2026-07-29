@@ -38,7 +38,9 @@ export function buildReport(d) {
 
   const nextActions = (d.next_actions || defaultActions(d)).map((a) => `<li>${esc(a)}</li>`).join("");
   const audioNote = d.audio && d.audio.present
-    ? `<div class="imp" style="margin-top:10px">Audio was present and is <b>not transcribed</b> by the engine — a reviewer should listen to the clip(s) for any narrated measurements or model numbers.</div>` : "";
+    ? (d.audio.transcribed
+        ? `<div class="imp" style="margin-top:10px">Audio was present and <b>transcribed</b> — the technician's narration was read as part of this review.</div>`
+        : `<div class="imp" style="margin-top:10px">Audio was present but <b>not transcribed</b> — a reviewer should listen to the clip(s) for any narrated measurements or model numbers.</div>`) : "";
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
  body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2430;margin:0;background:#f4f6f8}

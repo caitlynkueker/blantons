@@ -13,7 +13,8 @@ GUARDRAILS — non-negotiable, reflect in every output:
 WHAT TO READ:
 - Read BOTH data plates (outdoor condenser + indoor air-handler/coil): model, serial, MFG date, refrigerant, MCA, MOP/max breaker, RLA, electric-heat kW / "heater installed". Confirm indoor/outdoor MATCH (tonnage + refrigerant).
 - From video frames, look for: drain trap/float switch/secondary protection, disconnect + whip, breaker/contactor enclosure, line-set insulation, service/airflow clearances, thermostat function. Re-reviewing frames can CLEAR an item — list those.
-- Note any visible commissioning data (pressures, superheat/subcool, static pressure, amp/voltage) as supporting charge/airflow verification. Audio is not transcribed here — if audio is present, note reviewer should listen.
+- Note any visible commissioning data (pressures, superheat/subcool, static pressure, amp/voltage) as supporting charge/airflow verification.
+- If a "TECH NARRATION" transcript is provided, treat it as spoken evidence from the technician: use stated model/serial numbers, measurements, and confirmations ("I torqued the lugs", "subcooling is 10"), and FLAG any contradiction between what is said and what the images show. If narration is absent or wasn't transcribed, note the reviewer should listen.
 
 REQUIRED-EVIDENCE CHECKLIST (mark present vs still-needed): outdoor condenser plate; indoor coil plate; condenser exterior (pad/disconnect/whip/clearances); air-handler (support, trapped primary drain, secondary protection, insulated suction line); condensate termination (drain test); outdoor electrical (enclosure/contactor opened); indoor panel breaker; thermostat function test; A2L label close-ups if R-454B/R-32; clearance/working-space; commissioning data.
 
