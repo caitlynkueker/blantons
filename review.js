@@ -9,8 +9,8 @@ import { buildReport } from "./report.js";
 import { SYSTEM_PROMPT } from "./prompt.js";
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
-const FRAME_FPS = process.env.FRAME_FPS || "0.5";
-const MAX_IMAGES = parseInt(process.env.MAX_IMAGES || "42", 10);
+const FRAME_FPS = process.env.FRAME_FPS || "1";
+const MAX_IMAGES = parseInt(process.env.MAX_IMAGES || "90", 10);
 const HUB_SUBMIT_URL = process.env.HUB_SUBMIT_URL || "https://qcinstall.netlify.app/.netlify/functions/qc-submit";
 const HUB_LESSONS_URL = process.env.HUB_LESSONS_URL || HUB_SUBMIT_URL.replace(/qc-submit\/?$/, "qc-lessons");
 
@@ -66,7 +66,7 @@ function walk(dir, out = []) {
 
 // Shrink to <=1200px, jpeg q72 — keeps plates legible while cutting token cost.
 function toJpeg(src, dst) {
-  try { sh("convert", [src + "[0]", "-auto-orient", "-resize", "1200x1200>", "-quality", "72", dst]); return fs.existsSync(dst); }
+  try { sh("convert", [src + "[0]", "-auto-orient", "-resize", "1400x1400>", "-quality", "75", dst]); return fs.existsSync(dst); }
   catch { return false; }
 }
 
@@ -107,13 +107,25 @@ export async function reviewJob({ job, zipPath, name }) {
     if (text) transcripts.push({ src: clip.src, text });
   }
 
-  // Cap total images: keep ALL photos, fill the rest with evenly-sampled frames.
+  // Choose which images to send. Video frames are PRIMARY evidence (the tech
+  // films close-ups of the exact connections/defects), so GUARANTEE them a real
+  // share of the budget. The old logic sent photos first and gave video only the
+  // leftovers — which starved photo-heavy jobs of video and made the review miss
+  // things clearly shown on camera.
   const photoImgs = prepped.filter((x) => x.kind === "photo");
   const frameImgs = prepped.filter((x) => x.kind === "frame");
-  const room = Math.max(0, MAX_IMAGES - photoImgs.length);
-  const step = frameImgs.length > room && room > 0 ? Math.ceil(frameImgs.length / room) : 1;
-  const chosenFrames = room > 0 ? frameImgs.filter((_, i) => i % step === 0).slice(0, room) : [];
-  const chosen = [...photoImgs, ...chosenFrames];
+  const cap = MAX_IMAGES;
+  let photosWanted, framesWanted;
+  if (!frameImgs.length) { photosWanted = Math.min(photoImgs.length, cap); framesWanted = 0; }
+  else {
+    const reserve = Math.min(frameImgs.length, Math.max(24, Math.floor(cap * 0.5))); // video gets >= half (or all frames)
+    photosWanted = Math.min(photoImgs.length, cap - reserve);
+    framesWanted = Math.min(frameImgs.length, cap - photosWanted);
+  }
+  const chosenPhotos = photoImgs.slice(0, photosWanted);
+  const fstep = (framesWanted > 0 && frameImgs.length > framesWanted) ? Math.ceil(frameImgs.length / framesWanted) : 1;
+  const chosenFrames = framesWanted > 0 ? frameImgs.filter((_, i) => i % fstep === 0).slice(0, framesWanted) : [];
+  const chosen = [...chosenPhotos, ...chosenFrames];
 
   const images = chosen.map((x, i) => ({ index: i, kind: x.kind, src: x.src, b64: fs.readFileSync(x.path).toString("base64") }));
 
