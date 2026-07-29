@@ -101,12 +101,15 @@ export async function reviewJob({ job, zipPath, name }) {
     `Review this completed NC residential HVAC install per your instructions. Return ONLY the JSON object described in your instructions — no prose, no markdown fences.` });
 
   const msg = await anthropic.messages.create({
-    model: MODEL, max_tokens: 4096, system: SYSTEM_PROMPT,
+    model: MODEL, max_tokens: 8192, system: SYSTEM_PROMPT,
     messages: [{ role: "user", content }],
   });
   const raw = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
   const data = parseJson(raw);
-  if (!data) throw new Error("model did not return parseable JSON");
+  if (!data) {
+    console.error(`[job ${job}] stop_reason=${msg.stop_reason} rawlen=${raw.length} RAW_HEAD=${raw.slice(0, 600)} RAW_TAIL=${raw.slice(-200)}`);
+    throw new Error("model did not return parseable JSON");
+  }
 
   // Attach referenced images (plates + finding evidence) for the report.
   data._images = images;
