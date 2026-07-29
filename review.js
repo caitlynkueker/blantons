@@ -21,10 +21,18 @@ async function fetchLessons() {
     const r = await fetch(HUB_LESSONS_URL, { headers: { "X-QC-Key": process.env.QC_SUBMIT_KEY || "" } });
     if (!r.ok) return "";
     const j = await r.json();
+    let out = "";
+    const notes = (j.notes || []).slice(0, 60);
+    if (notes.length) {
+      out += `\n\nBLANTON'S CRITICAL INFO / STANDING QC KNOWLEDGE — apply EVERY item below on this job; these are company must-checks and reference facts, weight them heavily:\n` +
+        notes.map((n) => `• ${String(n.text).replace(/\s+/g, " ").trim()}`).join("\n");
+    }
     const ls = (j.lessons || []).slice(0, 40);
-    if (!ls.length) return "";
-    const lines = ls.map((l) => `- Job ${l.job}: inspection ${String(l.outcome).toUpperCase()}${l.why ? " — " + l.why : ""}`);
-    return `\n\nLEARNED FROM BLANTON'S INSPECTORS (real outcomes managers labeled — weight these patterns; a repeat of a past FAILED reason should be flagged, a past PASSED pattern should not be over-flagged):\n${lines.join("\n")}`;
+    if (ls.length) {
+      const lines = ls.map((l) => `- Job ${l.job}: inspection ${String(l.outcome).toUpperCase()}${l.why ? " — " + l.why : ""}`);
+      out += `\n\nLEARNED FROM BLANTON'S INSPECTORS (real outcomes managers labeled — weight these patterns; a repeat of a past FAILED reason should be flagged, a past PASSED pattern should not be over-flagged):\n${lines.join("\n")}`;
+    }
+    return out;
   } catch { return ""; }
 }
 
