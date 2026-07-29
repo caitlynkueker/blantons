@@ -78,7 +78,7 @@ function toJpeg(src, dst) {
   catch { return false; }
 }
 
-export async function reviewJob({ job, zipPath, name }) {
+export async function reviewJob({ job, zipPath, name, note }) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), `qc_${job}_`));
   const media = path.join(work, "media"); fs.mkdirSync(media, { recursive: true });
   const prep = path.join(work, "prep"); fs.mkdirSync(prep, { recursive: true });
@@ -145,6 +145,9 @@ export async function reviewJob({ job, zipPath, name }) {
     content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: im.b64 } });
   });
   const lessonsText = await fetchLessons();
+  const jobNote = note && note.trim()
+    ? `\n\nCRITICAL INFO FOR THIS JOB (submitted by the person who dropped it — apply it directly to this review; it is context they know that you may not see): ${note.replace(/\s+/g, " ").trim()}`
+    : "";
   const narration = transcripts.length
     ? "\n\nTECH NARRATION — transcribed from the video/audio. Treat this as spoken EVIDENCE from the technician: they often state model/serial numbers, measurements, what they are pointing at, and whether a step was done. Use it alongside the images, and flag any contradiction between what is said and what is shown:\n" +
       transcripts.map((x) => `• (${x.src}) “${String(x.text).replace(/\s+/g, " ").trim()}”`).join("\n")
@@ -154,7 +157,7 @@ export async function reviewJob({ job, zipPath, name }) {
   content.push({ type: "text", text:
     `JOB NUMBER: ${job}\n` +
     `MEDIA: ${photos.length} photos, ${videos.length} videos (${images.filter(i=>i.kind==="frame").length} frames sampled), audio ${audioNote}.` +
-    narration + lessonsText + `\n\n` +
+    jobNote + narration + lessonsText + `\n\n` +
     `Review this completed NC residential HVAC install per your instructions. Return ONLY the JSON object described in your instructions — no prose, no markdown fences.` });
 
   const msg = await anthropic.messages.create({

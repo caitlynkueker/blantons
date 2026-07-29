@@ -65,10 +65,11 @@ app.post("/jobs", upload.single("zip"), async (req, res) => {
 
   const zipPath = req.file.path;
   const name = (req.body && req.body.name) || req.file.originalname || "job.zip";
+  const note = String((req.body && req.body.note) || "").slice(0, 600); // per-job critical info
   // Answer now; do the heavy work in the background.
   res.status(202).json({ ok: true, job, status: "Reviewing", message: "Review started; the report will post to the hub when it finishes." });
 
-  reviewJob({ job, zipPath, name })
+  reviewJob({ job, zipPath, name, note })
     .then((r) => console.log(`[job ${job}] done -> ${r && r.status}`))
     .catch((e) => console.error(`[job ${job}] FAILED:`, e && (e.stack || e.message || e)))
     .finally(() => { try { fs.rmSync(zipPath, { force: true }); } catch {} });
